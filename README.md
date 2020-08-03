@@ -107,6 +107,7 @@ optional arguments:
   -f, --force           force an update/create
   -r REPEAT, --repeat REPEAT
                         keep running and repeat every N seconds
+  -q, --quiet           Be silent (no output) under normal operation
 ```
 
 The force option runs the script, even when no IP change has been detected. 
@@ -130,6 +131,15 @@ https://github.com/mpolden/ipd A simple service for looking up your IP address. 
 
 #### use external services
 choose one as described in the config file. 
+
+#### Shell exit status codes
+```
+0 No errors
+1 General script errors
+130 Failed to get zone uuid of domain
+131 Failed to get current IP of subdomain
+132 Failed to update IP
+```
 
 ### Cron the script
 
