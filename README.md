@@ -147,6 +147,18 @@ Run the script every five minutes.
 ```
 */5 * * * * /root/gandi-live-dns-master/src/gandi-live-dns.py >/dev/null 2>&1 
 ```
+alternatively, an example script in /etc/cron.hourly
+```
+#!/bin/bash
+# Updates dns zone at gandi
+tmpf=$(mktemp)
+python3 /usr/local/share/gandi-live-dns/src/gandi-live-dns4.py -q > $tmpf
+if [ $? != 0 ]
+then
+                echo "Failed to run gandi-dyndns" | mailx -s "cron.hourly ddns failed. Check gandi dyndns." -a $tmpf user@example.com
+fi
+rm $tmpf
+```
 
 ### Run with Docker
 
