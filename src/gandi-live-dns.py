@@ -14,6 +14,7 @@ http://doc.livedns.gandi.net/
 http://doc.livedns.gandi.net/#api-endpoint -> https://dns.gandi.net/api/v5/
 '''
 
+import sys
 import json
 import requests
 import ipaddress
@@ -22,6 +23,11 @@ import argparse
 import threading as th
 from pprint import pprint
 
+quiet=False
+
+def printd(*msg):
+    if not quiet:
+        print(msg)
 
 def check_is_ipv6(ip_address, verbose=False):
     return ipaddress.ip_address(ip_address).version == 6
@@ -32,9 +38,9 @@ def get_dynip(ifconfig_provider, verbose=False):
     similar to curl ifconfig.me/ip, see example.config.py for details to ifconfig providers 
     '''
     if verbose:
-        print(f'Using {ifconfig_provider}')
+        printd(f'Using {ifconfig_provider}')
     r = requests.get(ifconfig_provider)
-    print (f'Checking dynamic IP: {r.text.strip()}')
+    printd (f'Checking dynamic IP: {r.text.strip()}')
     return r.text.strip()
 
 def get_uuid(verbose=False):
@@ -51,9 +57,9 @@ def get_uuid(verbose=False):
     if u.status_code == 200:
         return json_object['zone_uuid']
     else:
-        print(f'Error: HTTP Status Code {u.status_code} when trying to get Zone UUID')
+        printd(f'Error: HTTP Status Code {u.status_code} when trying to get Zone UUID')
         pprint(u.json())
-        exit()
+        sys.exit(130)
 
 def get_dnsip(uuid, is_ipv6=False, verbose=False):
     ''' find out IP from first Subdomain DNS-Record
@@ -78,12 +84,12 @@ def get_dnsip(uuid, is_ipv6=False, verbose=False):
         if verbose:
             pprint(json_object)
         dnsip = json_object['rrset_values'][0].strip()
-        print (f'Checking IP from DNS Record {subdomain}: {dnsip}')
+        printd (f'Checking IP from DNS Record {subdomain}: {dnsip}')
         return dnsip
     else:
-        print('Error: HTTP Status Code ', u.status_code, 'when trying to get IP from subdomain', subdomain)
+        printd('Error: HTTP Status Code ', u.status_code, 'when trying to get IP from subdomain', subdomain)
         pprint(u.json())
-        exit()
+        sys.exit(131)
 
 def update_records(uuid, dynIP, subdomain, is_ipv6=False, verbose=False):
     ''' update DNS Records for Subdomains
@@ -105,25 +111,28 @@ def update_records(uuid, dynIP, subdomain, is_ipv6=False, verbose=False):
     u = requests.put(url, data=json.dumps(payload), headers=headers)
     json_object = u.json()
     if u.status_code == 201:
-        print (f'Status Code: {u.status_code}, {json_object["message"]}, IP updated for {subdomain}')
+        printd (f'Status Code: {u.status_code}, {json_object["message"]}, IP updated for {subdomain}')
         return True
     else:
-        print (f'Error: HTTP Status Code {u.status_code} when trying to update IP from subdomain {subdomain}')
-        print (json_object['message'])
-        exit()
+        printd (f'Error: HTTP Status Code {u.status_code} when trying to update IP from subdomain {subdomain}')
+        printd (json_object['message'])
+        sys.exit(132)
 
-
-
-def main(force_update, verbosity, repeat):
+def main(force_update, verbosity, repeat, quietarg):
+    global quiet
+    if quietarg:
+        quiet=True
+    else:
+        quiet=False
 
     if verbosity:
-        print('verbosity turned on')
+        printd('verbosity turned on')
         verbose = True
     else:
         verbose =False
 
     if repeat and verbose:
-        print(f'repeat turned on, will repeat every {repeat} seconds')
+        printd(f'repeat turned on, will repeat every {repeat} seconds')
 
     #get zone ID from Account
     uuid = get_uuid()
@@ -134,31 +143,31 @@ def main(force_update, verbosity, repeat):
     if check_is_ipv6(dynIP, verbose):
         subdomains = config.subdomains6
         is_ipv6 = True
-        print('Detected ipv6')
+        printd('Detected ipv6')
     else:
-        print('Detected ipv4')
+        printd('Detected ipv4')
         is_ipv6 = False
         subdomains = config.subdomains
 
     dnsIP = get_dnsip(uuid, is_ipv6, verbose)
 
     if force_update:
-        print ('Going to update/create the DNS Records for the subdomains')
+        printd ('Going to update/create the DNS Records for the subdomains')
         for sub in subdomains:
             update_records(uuid, dynIP, sub, is_ipv6, verbose)
     else:
         if verbose:
-            print(f'dynIP: {dynIP}')
-            print(f'dnsIP: {dnsIP}')
+            printd(f'dynIP: {dynIP}')
+            printd(f'dnsIP: {dnsIP}')
         if dynIP == dnsIP:
-            print ('IP Address Match - no further action')
+            printd ('IP Address Match - no further action')
         else:
-            print (f'IP Address Mismatch - going to update the DNS Records for the subdomains with new IP {dynIP}')
+            printd (f'IP Address Mismatch - going to update the DNS Records for the subdomains with new IP {dynIP}')
             for sub in subdomains:
                 update_records(uuid, dynIP, sub, is_ipv6, verbose)
     if repeat:
         if verbosity:
-            print(f'Repeating in {repeat} seconds')
+            printd(f'Repeating in {repeat} seconds')
         th.Timer(repeat, main, [force_update, verbosity, repeat]).start()
 
 
@@ -167,5 +176,6 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--verbose', help='increase output verbosity', action='store_true')
     parser.add_argument('-f', '--force', help='force an update/create', action='store_true')
     parser.add_argument('-r', '--repeat', type=int, help='keep running and repeat every N seconds')
+    parser.add_argument('-q', '--quiet', help='No printouts. Just status codes.', action='store_true')
     args = parser.parse_args()
-    main(args.force, args.verbose, args.repeat)
+    main(args.force, args.verbose, args.repeat, args.quiet)
